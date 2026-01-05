@@ -1,4 +1,5 @@
 .spec-workflow/
+server/target
 models/
 
 # Rust build artifacts
