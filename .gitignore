@@ -1,2 +1,10 @@
 .spec-workflow/
 models/
+
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+# Cargo lock file (include for binaries, exclude for libraries)
+Cargo.lock
