@@ -2,9 +2,11 @@
 models/
 
 # Rust build artifacts
-/target/
+server/target/
 **/target/
 **/*.rs.bk
 *.pdb
 # Cargo lock file (include for binaries, exclude for libraries)
 Cargo.lock
+
+. 
