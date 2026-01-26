@@ -1,77 +1,90 @@
-use std::error::Error;
-use std::num::NonZeroU32;
+mod model;
 
-use llama_cpp_2::context::LlamaContext;
-use llama_cpp_2::context::params::LlamaContextParams;
+use axum::extract::State;
+use axum::{Json, Router, routing::get};
+use llama_cpp_2::context::{self, LlamaContext, kv_cache};
 use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::Special::Tokenize;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
-use llama_cpp_2::token::LlamaToken;
+use llama_cpp_2::model::LlamaModel;
+use serde::Serialize;
+use std::time::Duration;
+use std::vec;
+use std::{sync::Arc, time::Instant};
+use uuid::Uuid;
 
-fn process_prompt(
-    model: &LlamaModel,
-    prompt: &str,
-    context: &mut LlamaContext,
-) -> Result<(), Box<dyn Error>> {
-    let tokens = model.str_to_token(prompt, AddBos::Always)?;
+use crate::model::{context_init, model_init};
 
-    let mut batch = LlamaBatch::new(512, 1);
-
-    for (pos, token) in tokens.iter().enumerate() {
-        if pos == tokens.len() - 1 {
-            batch.add(*token, pos as i32, &[0], true)?;
-        } else {
-            batch.add(*token, pos as i32, &[0], false)?;
-        }
-    }
-
-    context.decode(&mut batch)?;
-
-    Ok(())
+#[derive(Serialize)]
+struct HealthResponse {
+    status: String,
+    version: String,
+    up_time: u64,
 }
 
-fn get_next_token(context: &mut LlamaContext) -> Result<LlamaToken, Box<dyn Error>> {
-    let new_token = context.token_data_array().sample_token_greedy();
-    let pos = context.kv_cache_seq_pos_max(0);
-
-    let mut batch = LlamaBatch::new(1, 1);
-    batch.add(new_token, pos + 1, &[0], true)?;
-
-    context.decode(&mut batch)?;
-
-    Ok(new_token)
+#[derive(Serialize)]
+struct SessionResponse {
+    session_id: String,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // INIT
-    let path = "../models/qwen2.5-coder-1.5b-instruct-q5_k_m.gguf";
-    let backend = LlamaBackend::init()?;
-    let model = LlamaModel::load_from_file(&backend, path, &LlamaModelParams::default())?;
-    let mut context = model.new_context(
-        &backend,
-        LlamaContextParams::default().with_n_ctx(NonZeroU32::new(2048)),
-    )?;
-    // END INIT
+struct AppState {
+    start_time: Instant,
+    model: LlamaModel,
+    backend: LlamaBackend,
+}
 
-    let prompt = "fn get_next_token(context: &mut LlamaContext) -> Result<LlamaToken, Box<dyn Error>> {let new_token = context.token_data_array().sample_token_greedy();let pos = context.kv_cache_seq_pos_max(0);";
-
-    print!("{}", prompt);
-
-    process_prompt(&model, prompt, &mut context)?;
-
-    loop {
-        let token = get_next_token(&mut context)?;
-        if model.is_eog_token(token) {
-            break;
-        } else {
-            let text = model.token_to_str(token, Tokenize)?;
-            print!("{}", text);
-        }
+impl AppState {
+    fn up_time(&self) -> u64 {
+        self.start_time.elapsed().as_secs()
     }
+}
 
-    println!("");
-    println!("Done!");
-    Ok(())
+struct Session {
+    session_id: Uuid,
+    kv_cache: Vec<u8>,
+}
+
+#[tokio::main]
+async fn main() {
+    let model_path = "../models/qwen2.5-coder-1.5b-instruct-q5_k_m.gguf";
+
+    let Ok((model, backend)) = model_init(model_path) else {
+        panic!()
+    };
+
+    let state = Arc::new(AppState {
+        start_time: Instant::now(),
+        model: model,
+        backend: backend,
+    });
+
+    let app = Router::new()
+        .route("/health", get(health_handler))
+        .route("/create_session", get(create_session_handler))
+        .with_state(state);
+
+    let addr = "127.0.0.1:8000";
+    println!("Server Listening on: {}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        up_time: state.up_time(),
+    })
+}
+
+async fn create_session_handler() -> Json<SessionResponse> {
+    let kv_cache: Vec<u8> = vec![];
+
+    let session = Arc::new(Session {
+        session_id: Uuid::new_v4(),
+        kv_cache: kv_cache,
+    });
+
+    Json(SessionResponse {
+        session_id: session.session_id.to_string(),
+    })
 }
