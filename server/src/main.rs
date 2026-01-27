@@ -2,16 +2,17 @@ mod model;
 
 use axum::extract::State;
 use axum::{Json, Router, routing::get};
-use llama_cpp_2::context::{self, LlamaContext, kv_cache};
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::model::LlamaModel;
 use serde::Serialize;
-use std::time::Duration;
+use serde_json::to_string;
+use std::collections::HashMap;
+use std::sync::RwLock;
 use std::vec;
 use std::{sync::Arc, time::Instant};
 use uuid::Uuid;
 
-use crate::model::{context_init, model_init};
+use crate::model::model_init;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -25,10 +26,16 @@ struct SessionResponse {
     session_id: String,
 }
 
+#[derive(Serialize)]
+struct SessionsResponse {
+    session_ids: Vec<String>,
+}
+
 struct AppState {
     start_time: Instant,
     model: LlamaModel,
     backend: LlamaBackend,
+    sessions: RwLock<HashMap<Uuid, Session>>,
 }
 
 impl AppState {
@@ -54,11 +61,13 @@ async fn main() {
         start_time: Instant::now(),
         model: model,
         backend: backend,
+        sessions: RwLock::new(HashMap::new()),
     });
 
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/create_session", get(create_session_handler))
+        .route("/get_sessions", get(get_all_sessions_handler))
         .with_state(state);
 
     let addr = "127.0.0.1:8000";
@@ -76,15 +85,27 @@ async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthRespon
     })
 }
 
-async fn create_session_handler() -> Json<SessionResponse> {
-    let kv_cache: Vec<u8> = vec![];
-
-    let session = Arc::new(Session {
-        session_id: Uuid::new_v4(),
-        kv_cache: kv_cache,
-    });
+async fn create_session_handler(State(state): State<Arc<AppState>>) -> Json<SessionResponse> {
+    let session_id = Uuid::new_v4();
+    let session = Session {
+        session_id,
+        kv_cache: vec![],
+    };
+    state.sessions.write().unwrap().insert(session_id, session);
 
     Json(SessionResponse {
-        session_id: session.session_id.to_string(),
+        session_id: session_id.to_string(),
     })
+}
+
+async fn get_all_sessions_handler(State(state): State<Arc<AppState>>) -> Json<SessionsResponse> {
+    let session_ids = state
+        .sessions
+        .read()
+        .unwrap()
+        .keys()
+        .map(|key| key.to_string())
+        .collect();
+
+    Json(SessionsResponse { session_ids })
 }
