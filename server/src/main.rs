@@ -1,52 +1,23 @@
 mod model;
+mod session;
+mod state;
 
 use axum::extract::State;
 use axum::{Json, Router, routing::get};
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::model::LlamaModel;
 use serde::Serialize;
-use serde_json::to_string;
 use std::collections::HashMap;
 use std::sync::RwLock;
-use std::vec;
 use std::{sync::Arc, time::Instant};
-use uuid::Uuid;
 
 use crate::model::model_init;
+use crate::session::{create_session_handler, get_all_sessions_handler};
+use crate::state::AppState;
 
 #[derive(Serialize)]
 struct HealthResponse {
     status: String,
     version: String,
     up_time: u64,
-}
-
-#[derive(Serialize)]
-struct SessionResponse {
-    session_id: String,
-}
-
-#[derive(Serialize)]
-struct SessionsResponse {
-    session_ids: Vec<String>,
-}
-
-struct AppState {
-    start_time: Instant,
-    model: LlamaModel,
-    backend: LlamaBackend,
-    sessions: RwLock<HashMap<Uuid, Session>>,
-}
-
-impl AppState {
-    fn up_time(&self) -> u64 {
-        self.start_time.elapsed().as_secs()
-    }
-}
-
-struct Session {
-    session_id: Uuid,
-    kv_cache: Vec<u8>,
 }
 
 #[tokio::main]
@@ -83,29 +54,4 @@ async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthRespon
         version: env!("CARGO_PKG_VERSION").to_string(),
         up_time: state.up_time(),
     })
-}
-
-async fn create_session_handler(State(state): State<Arc<AppState>>) -> Json<SessionResponse> {
-    let session_id = Uuid::new_v4();
-    let session = Session {
-        session_id,
-        kv_cache: vec![],
-    };
-    state.sessions.write().unwrap().insert(session_id, session);
-
-    Json(SessionResponse {
-        session_id: session_id.to_string(),
-    })
-}
-
-async fn get_all_sessions_handler(State(state): State<Arc<AppState>>) -> Json<SessionsResponse> {
-    let session_ids = state
-        .sessions
-        .read()
-        .unwrap()
-        .keys()
-        .map(|key| key.to_string())
-        .collect();
-
-    Json(SessionsResponse { session_ids })
 }
