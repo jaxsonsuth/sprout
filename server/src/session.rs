@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::vec;
 use uuid::Uuid;
 
-use crate::AppState;
+use crate::state::AppState;
 
 pub struct Session {
     session_id: Uuid,
