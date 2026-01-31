@@ -15,6 +15,15 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub fn new(model: LlamaModel, backend: LlamaBackend) -> Self {
+        Self {
+            start_time: Instant::now(),
+            model,
+            backend,
+            sessions: RwLock::new(HashMap::new()),
+        }
+    }
+
     pub fn up_time(&self) -> u64 {
         self.start_time.elapsed().as_secs()
     }
