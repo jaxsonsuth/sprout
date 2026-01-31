@@ -9,7 +9,7 @@ use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::infrence::{CompletionRequest, CompletionResponse, completion_handler};
+use crate::infrence::{completion_handler, completion_stream_handler};
 use crate::model::model_init;
 use crate::session::{create_session_handler, get_all_sessions_handler};
 use crate::state::AppState;
@@ -33,7 +33,8 @@ async fn main() {
         .route("/health", get(health_handler))
         .route("/create_session", get(create_session_handler))
         .route("/get_sessions", get(get_all_sessions_handler))
-        .route("/compleat/:id", post(completion_handler))
+        .route("/compleat/{id}", post(completion_handler))
+        .route("/compleat/stream/{id}", post(completion_stream_handler))
         .with_state(state);
 
     let addr = "127.0.0.1:8000";
