@@ -8,6 +8,7 @@ use llama_cpp_2::model::Special::Tokenize;
 use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -78,17 +79,37 @@ pub async fn completion_stream_handler(
     let state = Arc::clone(&state);
 
     tokio::task::spawn_blocking(move || {
+        let kv_cache = {
+            let sessions = state.sessions.read().unwrap();
+            sessions.get(&session_id).map(|s| s.kv_cache.clone())
+        };
         let mut context = context_init(context_size, &state.model, &state.backend).unwrap();
+
+        if let Some(cache) = kv_cache {
+            if !cache.is_empty() {
+                unsafe { context.set_state_data(&cache) };
+            }
+        }
         process_prompt(&state.model, &prompt, &mut context).expect("Failed to process prompt");
 
         loop {
             let token = get_next_token(&mut context).unwrap();
             let text = state.model.token_to_str(token, Tokenize).unwrap();
-            if state.model.is_eog_token(token) {
-                tx.blocking_send((text, true));
+            let is_eog = state.model.is_eog_token(token);
+
+            if tx.blocking_send((text, is_eog)).is_err() {
                 break;
             }
-            if tx.blocking_send((text, false)).is_err() {
+            if is_eog {
+                let state_size = context.get_state_size();
+                let mut buffer = vec![0u8; state_size];
+
+                unsafe { context.copy_state_data(buffer.as_mut_ptr()) };
+
+                if let Some(session) = state.sessions.write().unwrap().get_mut(&session_id) {
+                    session.kv_cache = buffer;
+                }
+
                 break;
             }
         }

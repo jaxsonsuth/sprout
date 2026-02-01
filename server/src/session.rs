@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::state::AppState;
 
 pub struct Session {
-    session_id: Uuid,
-    kv_cache: Vec<u8>,
+    pub session_id: Uuid,
+    pub kv_cache: Vec<u8>,
 }
 
 //Create Session
