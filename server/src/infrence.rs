@@ -78,28 +78,26 @@ pub async fn completion_stream_handler(
     let state = Arc::clone(&state);
 
     tokio::task::spawn_blocking(move || {
-        // Create context HERE (lifetime is local to this thread)
         let mut context = context_init(context_size, &state.model, &state.backend).unwrap();
         process_prompt(&state.model, &prompt, &mut context).expect("Failed to process prompt");
 
         loop {
             let token = get_next_token(&mut context).unwrap();
-            if state.model.is_eog_token(token) {
-                break; // tx drops here, rx will get None
-            }
             let text = state.model.token_to_str(token, Tokenize).unwrap();
-            if tx.blocking_send(text).is_err() {
-                break; // receiver dropped (client disconnected)
+            if state.model.is_eog_token(token) {
+                tx.blocking_send((text, true));
+                break;
+            }
+            if tx.blocking_send((text, false)).is_err() {
+                break;
             }
         }
     });
 
-    // 4. Convert receiver to SSE stream and return immediately
-    //    (generation happens in background)
-    let stream = ReceiverStream::new(rx).map(|token| {
+    let stream = ReceiverStream::new(rx).map(|(token, done)| {
         let event = StreamEvent {
             text: token,
-            done: false,
+            done: done,
             error: None,
         };
         Ok(Event::default().data(serde_json::to_string(&event).unwrap()))
