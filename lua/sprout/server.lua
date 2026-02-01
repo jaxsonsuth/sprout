@@ -2,11 +2,14 @@ local M = {}
 
 M.job_id = nil
 
-function M.get_binary_path()
-	-- Get the path to this Lua file, then navigate to server binary
+function M.get_plugin_dir()
+	-- Get the path to this Lua file, then navigate to plugin root
 	local source = debug.getinfo(1, "S").source:sub(2) -- Remove leading @
-	local plugin_dir = vim.fn.fnamemodify(source, ":h:h:h") -- lua/sprout/server.lua -> repo root
-	return plugin_dir .. "/server/target/release/sprout-server"
+	return vim.fn.fnamemodify(source, ":h:h:h") -- lua/sprout/server.lua -> repo root
+end
+
+function M.get_binary_path()
+	return M.get_plugin_dir() .. "/server/target/release/sprout-server"
 end
 
 function M.start()
@@ -20,7 +23,9 @@ function M.start()
 		return
 	end
 
+	local plugin_dir = M.get_plugin_dir()
 	M.job_id = vim.fn.jobstart({ binary }, {
+		cwd = plugin_dir .. "/server", -- Run from server/ so ../models/ resolves correctly
 		detach = true,
 		on_exit = function()
 			M.job_id = nil
