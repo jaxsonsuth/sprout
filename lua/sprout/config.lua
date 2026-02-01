@@ -3,9 +3,9 @@ local M = {}
 M.defaults = {
 	server_url = "http://127.0.0.1:8000",
 	keymaps = {
-		trigger = "<C-s>",
-		accept = "<Tab>",
-		cancel = "<Esc>",
+		trigger = "<leader> mm",
+		accept = "<leader> ma",
+		cancel = "<leader> mn",
 	},
 	highlight = "Comment",
 	auto_start_server = true,
