@@ -5,5 +5,5 @@ server/target/
 *.pdb
 
 #Models
-models/
+models/*
 !models/README.md
