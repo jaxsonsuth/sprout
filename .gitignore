@@ -1,9 +1,9 @@
-.spec-workflow/
-server/target
-models/
-
 # Rust build artifacts
 server/target/
 **/target/
 **/*.rs.bk
 *.pdb
+
+#Models
+models/*
+!models/README.md
