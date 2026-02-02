@@ -19,6 +19,8 @@ use crate::model::context_init;
 use crate::state::AppState;
 
 const SYSTEM_PROMPT: &str = "Complete this code, do not reply with an explaination: ";
+const CONTEXT_SIZE: u32 = 4096;
+const GENERATION_LIMIT: i8 = 20;
 
 #[derive(Deserialize)]
 pub struct CompletionRequest {
@@ -43,11 +45,10 @@ pub async fn completion_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CompletionRequest>,
 ) -> Json<CompletionResponse> {
-    let context_size: u32 = 4096;
     let mut response_text = String::new();
     let prompt = format!("{}{}", SYSTEM_PROMPT, request.text);
 
-    let mut context = context_init(context_size, &state.model, &state.backend).unwrap();
+    let mut context = context_init(CONTEXT_SIZE, &state.model, &state.backend).unwrap();
     process_prompt(&state.model, &prompt, &mut context).expect("Failed to process prompt");
 
     loop {
@@ -71,24 +72,21 @@ pub async fn completion_stream_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CompletionRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
-    let context_size: u32 = 4096;
     let prompt = format!("{}{}", SYSTEM_PROMPT, request.text);
     let (tx, rx) = mpsc::channel(32);
-
     let state = Arc::clone(&state);
 
     tokio::task::spawn_blocking(move || {
-        let mut context = context_init(context_size, &state.model, &state.backend).unwrap();
+        let mut context = context_init(CONTEXT_SIZE, &state.model, &state.backend).unwrap();
         process_prompt(&state.model, &prompt, &mut context).expect("Failed to process prompt");
+        let mut tokens = 0;
 
         loop {
             let token = get_next_token(&mut context).unwrap();
             let text = state.model.token_to_str(token, Tokenize).unwrap();
-            if state.model.is_eog_token(token) {
-                tx.blocking_send((text, true));
-                break;
-            }
-            if tx.blocking_send((text, false)).is_err() {
+            let end = state.model.is_eog_token(token) || tokens > GENERATION_LIMIT;
+
+            if tx.blocking_send((text, end)).is_err() || end {
                 break;
             }
         }

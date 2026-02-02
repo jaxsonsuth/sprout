@@ -38,8 +38,11 @@ function M.stream_completion(session_id, prompt, on_token, on_done)
 			for _, line in ipairs(data) do
 				-- Parse SSE format: "data: <token>"
 				local token = line:match("^data: (.*)$")
-				if token then
-					on_token(token)
+				if token and token ~= "" then
+					local ok, parsed = pcall(vim.json.decode, token)
+					if ok and parsed.text then
+						on_token(parsed.text)
+					end
 				end
 			end
 		end,
