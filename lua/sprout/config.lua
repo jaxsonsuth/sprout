@@ -4,8 +4,8 @@ M.defaults = {
 	server_url = "http://127.0.0.1:8000",
 	keymaps = {
 		trigger = "<C-a>",
-		accept = "<leader> ma",
-		cancel = "<leader> mn",
+		accept = "<C-s>",
+		cancel = "<C-j>",
 	},
 	highlight = "Comment",
 	auto_start_server = true,
