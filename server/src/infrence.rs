@@ -89,6 +89,7 @@ pub async fn completion_stream_handler(
             if tx.blocking_send((text, end)).is_err() || end {
                 break;
             }
+            tokens += 1;
         }
     });
 
