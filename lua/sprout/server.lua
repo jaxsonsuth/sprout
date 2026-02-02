@@ -43,6 +43,7 @@ end
 function M.ensure_running(callback)
 	-- Try health endpoint
 	vim.fn.jobstart({ "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:8000/health" }, {
+		stdout_buffered = true,
 		on_stdout = function(_, data)
 			local code = table.concat(data, "")
 			if code == "200" then
@@ -50,14 +51,6 @@ function M.ensure_running(callback)
 			else
 				M.start()
 				-- Give server a moment to start, then callback
-				vim.defer_fn(function()
-					callback(true)
-				end, 1000)
-			end
-		end,
-		on_exit = function(_, exit_code)
-			if exit_code ~= 0 then
-				M.start()
 				vim.defer_fn(function()
 					callback(true)
 				end, 1000)
