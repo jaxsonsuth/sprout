@@ -7,3 +7,5 @@ server/target/
 #Models
 models/*
 !models/README.md
+
+PROJECT_IDEA.md
